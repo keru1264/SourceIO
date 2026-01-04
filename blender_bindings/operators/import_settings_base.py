@@ -16,6 +16,7 @@ class BSPOptions(SharedOptions):
     load_props: BoolProperty(name="Load prop entities", default=True)
     load_lights: BoolProperty(name="Load light entities", default=True)
     load_decals: BoolProperty(name="Load decal entities", default=True)
+    load_overlays: BoolProperty(name="Load overlays", default=True)
     load_static_props: BoolProperty(name="Load static prop entities", default=True)
     load_triggers: BoolProperty(name="Load trigger entities", default=False)
     load_info: BoolProperty(name="Load info entities", default=False)
