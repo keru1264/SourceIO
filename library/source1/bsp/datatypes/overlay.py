@@ -34,34 +34,54 @@ class Overlay:
 
     @property
     def basis(self):
-        basis = np.zeros((2, 3), dtype=np.float32)
-        basis[0] = self.uv_points.T[2][:3]
-        basis[1] = np.cross(self.normal, basis[0])
-        return basis
+        # Basis U is encoded in z components of uv_points 0, 1, 2
+        basis_u = np.array([
+            self.uv_points[0, 2],  # uv_points[0].z
+            self.uv_points[1, 2],  # uv_points[1].z
+            self.uv_points[2, 2],  # uv_points[2].z
+        ], dtype=np.float32)
+        
+        # Basis V = cross(normal, basis_u), then normalize
+        normal = np.array(self.normal, dtype=np.float32)
+        basis_v = np.cross(normal, basis_u)
+        basis_v_len = np.linalg.norm(basis_v)
+        if basis_v_len > 1e-6:
+            basis_v /= basis_v_len
+        
+        # Check flip flag in uv_points[3].z
+        if self.uv_points[3, 2] == 1.0:
+            basis_v = -basis_v
+        
+        return np.array([basis_u, basis_v], dtype=np.float32)
 
     @property
     def plane_points(self):
+        # UV points with z cleared (z was used for basis encoding)
         points = np.zeros((4, 2), dtype=np.float32)
-        points[0] = self.uv_points[0][:2][::-1]
-        points[1] = self.uv_points[1][:2][::-1]
-        points[2] = self.uv_points[2][:2][::-1]
-        points[3] = self.uv_points[3][:2][::-1]
+        points[0] = self.uv_points[0, :2]  # x, y only
+        points[1] = self.uv_points[1, :2]
+        points[2] = self.uv_points[2, :2]
+        points[3] = self.uv_points[3, :2]
         return points
 
     @property
     def plane(self):
+        # UV coordinates for texture mapping
         dst_uv = np.zeros((4, 2), dtype=np.float32)
         dst_uv[0] = self.u[0], self.v[0]
         dst_uv[1] = self.u[0], self.v[1]
         dst_uv[2] = self.u[1], self.v[1]
         dst_uv[3] = self.u[1], self.v[0]
+        
+        # World positions: origin + uv_point.x * basis_u + uv_point.y * basis_v
+        origin = np.array(self.origin, dtype=np.float32)
+        basis = self.basis
+        plane_pts = self.plane_points
+        
         dst_pos = np.zeros((4, 3), dtype=np.float32)
-        for n, _ in enumerate(dst_pos):
-            # out[0] = v1[0] + v2[0] * a;
-            # out[1] = v1[1] + v2[1] * a;
-            dst_pos[n] = self.origin + self.basis[0] * self.plane_points[n][0]
-            dst_pos[n] += self.basis[1] * self.plane_points[n][1]
-
+        for n in range(4):
+            dst_pos[n] = origin + basis[0] * plane_pts[n, 0] + basis[1] * plane_pts[n, 1]
+        
         return dst_pos, dst_uv
 
     @classmethod
