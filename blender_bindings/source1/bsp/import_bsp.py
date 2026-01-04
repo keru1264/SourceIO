@@ -456,49 +456,51 @@ def import_overlays(bsp: VBSPFile, settings: Source1BSPSettings,
         return
     
     parent_collection = get_or_create_collection('overlays', master_collection)
-    overlay_count = len(overlay_lump.overlays)
     
     for n, overlay in enumerate(overlay_lump.overlays):
-        logger.info(f'Processing {n + 1}/{overlay_count} overlay')
-        
-        # Get vertex positions and UV coordinates from the overlay plane property
-        dst_pos, dst_uv = overlay.plane
-        
-        # Scale vertices by settings.scale
-        vertices = dst_pos * settings.scale
-        
-        # Add small offset along normal to prevent z-fighting
-        normal = np.asarray(overlay.normal, dtype=np.float32)
-        offset = normal * 0.01 * settings.scale
-        vertices += offset
-        
-        # Create quad face (4 vertices forming 2 triangles)
-        # Vertices are ordered as: [0, 1, 2, 3], forming triangles [0, 1, 2] and [0, 2, 3]
-        face_indices = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
-        
-        # Create mesh
-        mesh_data = FastMesh.new(f"{bsp.filepath.stem}_overlay_{overlay.id}_MESH")
-        mesh_obj = bpy.data.objects.new(f"{bsp.filepath.stem}_overlay_{overlay.id}", mesh_data)
-        parent_collection.objects.link(mesh_obj)
-        
-        mesh_data.from_pydata(vertices, [], face_indices)
-        
-        # Set up UV mapping
-        uv_data = mesh_data.uv_layers.new().data
-        vertex_indices = np.zeros((len(mesh_data.loops,)), dtype=np.uint32)
-        mesh_data.loops.foreach_get('vertex_index', vertex_indices)
-        uv_data.foreach_set('uv', dst_uv[vertex_indices].flatten())
-        
-        # Get material name from tex_info → LUMP_TEXINFO → LUMP_TEXDATA → LUMP_TEXDATA_STRING_TABLE
-        if 0 <= overlay.tex_info < len(texture_info_lump.texture_info):
-            texture_info = texture_info_lump.texture_info[overlay.tex_info]
-            if 0 <= texture_info.texture_data_id < len(texture_data_lump.texture_data):
-                texture_data = texture_data_lump.texture_data[texture_info.texture_data_id]
-                material_name = strings_lump.strings[texture_data.name_id] or "NO_NAME"
-                material_name = strip_patch_coordinates.sub("", material_name)
-                add_material(get_or_create_material(path_stem(material_name), material_name), mesh_obj)
-        
-        mesh_data.validate(clean_customdata=False)
+        try:
+            # Get vertex positions and UV coordinates from the overlay plane property
+            dst_pos, dst_uv = overlay.plane
+            
+            # Scale vertices by settings.scale
+            vertices = dst_pos * settings.scale
+            
+            # Add small offset along normal to prevent z-fighting
+            normal = np.asarray(overlay.normal, dtype=np.float32)
+            offset = normal * 0.01 * settings.scale
+            vertices += offset
+            
+            # Create quad face (4 vertices forming 1 quad)
+            faces = [(0, 1, 2, 3)]
+            
+            # Create mesh
+            mesh_data = FastMesh.new(f"{bsp.filepath.stem}_overlay_{overlay.id}_MESH")
+            mesh_obj = bpy.data.objects.new(f"{bsp.filepath.stem}_overlay_{overlay.id}", mesh_data)
+            parent_collection.objects.link(mesh_obj)
+            
+            mesh_data.from_pydata(vertices.tolist(), [], faces)
+            
+            # Set up UV mapping
+            uv_data = mesh_data.uv_layers.new().data
+            vertex_indices = np.zeros((len(mesh_data.loops),), dtype=np.uint32)
+            mesh_data.loops.foreach_get('vertex_index', vertex_indices)
+            uv_data.foreach_set('uv', dst_uv[vertex_indices].flatten())
+            
+            # Get material name from tex_info → LUMP_TEXINFO → LUMP_TEXDATA → LUMP_TEXDATA_STRING_TABLE
+            if 0 <= overlay.tex_info < len(texture_info_lump.texture_info):
+                texture_info = texture_info_lump.texture_info[overlay.tex_info]
+                if 0 <= texture_info.texture_data_id < len(texture_data_lump.texture_data):
+                    texture_data = texture_data_lump.texture_data[texture_info.texture_data_id]
+                    material_name = strings_lump.strings[texture_data.name_id] or "NO_NAME"
+                    material_name = strip_patch_coordinates.sub("", material_name)
+                    add_material(get_or_create_material(path_stem(material_name), material_name), mesh_obj)
+            
+            mesh_data.validate(clean_customdata=False)
+            
+        except Exception as e:
+            logger.warning(f"Failed to import overlay {overlay.id}: {e}")
+    
+    logger.info(f"Imported {len(overlay_lump.overlays)} overlays")
     # def load_physics(self):
     #     physics_lump: PhysicsLump = self.map_file.get_lump('LUMP_PHYSICS')
     #     if not physics_lump or not physics_lump.solid_blocks:
