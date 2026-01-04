@@ -482,7 +482,7 @@ def import_overlays(bsp: VBSPFile, settings: Source1BSPSettings,
             
             # Set up UV mapping
             uv_data = mesh_data.uv_layers.new().data
-            vertex_indices = np.zeros((len(mesh_data.loops,)), dtype=np.uint32)
+            vertex_indices = np.zeros((len(mesh_data.loops),), dtype=np.uint32)
             mesh_data.loops.foreach_get('vertex_index', vertex_indices)
             uv_data.foreach_set('uv', dst_uv[vertex_indices].flatten())
             

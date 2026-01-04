@@ -49,7 +49,7 @@ class Overlay:
             basis_v /= basis_v_len
         
         # Check flip flag in uv_points[3].z
-        if self.uv_points[3, 2] == 1.0:
+        if np.isclose(self.uv_points[3, 2], 1.0):
             basis_v = -basis_v
         
         return np.array([basis_u, basis_v], dtype=np.float32)
