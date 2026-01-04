@@ -490,9 +490,9 @@ def import_overlays(bsp: VBSPFile, settings: Source1BSPSettings,
         uv_data.foreach_set('uv', dst_uv[vertex_indices].flatten())
         
         # Get material name from tex_info → LUMP_TEXINFO → LUMP_TEXDATA → LUMP_TEXDATA_STRING_TABLE
-        if overlay.tex_info >= 0 and overlay.tex_info < len(texture_info_lump.texture_info):
+        if 0 <= overlay.tex_info < len(texture_info_lump.texture_info):
             texture_info = texture_info_lump.texture_info[overlay.tex_info]
-            if texture_info.texture_data_id >= 0 and texture_info.texture_data_id < len(texture_data_lump.texture_data):
+            if 0 <= texture_info.texture_data_id < len(texture_data_lump.texture_data):
                 texture_data = texture_data_lump.texture_data[texture_info.texture_data_id]
                 material_name = strings_lump.strings[texture_data.name_id] or "NO_NAME"
                 material_name = strip_patch_coordinates.sub("", material_name)
