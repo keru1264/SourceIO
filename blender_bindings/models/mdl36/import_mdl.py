@@ -215,7 +215,8 @@ def create_flex_drivers(obj, mdl: MdlV36):
 
         shape_key.driver_remove("value")
         fcurve = shape_key.driver_add("value")
-        fcurve.modifiers.remove(fcurve.modifiers[0])
+        if len(fcurve.modifiers) > 0:
+            fcurve.modifiers.remove(fcurve.modifiers[0])
 
         driver = fcurve.driver
         driver.type = 'SCRIPTED'
