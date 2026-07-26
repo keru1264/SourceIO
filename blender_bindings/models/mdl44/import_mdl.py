@@ -227,6 +227,8 @@ def create_flex_drivers(obj, mdl: MdlV44):
                 parse_expr(var, driver, shape_key_block)
 
     for target, expr in all_exprs.items():
+        if isinstance(expr, tuple):
+            expr = expr[0]
         shape_key_block = obj.data.shape_keys
         shape_key = shape_key_block.key_blocks.get(target, obj.shape_key_add(name=target))
         shape_key.value = 0.0
