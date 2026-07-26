@@ -169,11 +169,11 @@ class MdlV44(Mdl):
                    animations, key_values_raw, key_values, include_models)
 
     def rebuild_flex_rules(self):
-        flex_controllers: dict[str, FlexControllerUI] = {f.left_controller: f for f in self.flex_ui_controllers if
-                                                         f.stereo}
-        flex_controllers.update({f.right_controller: f for f in self.flex_ui_controllers if f.stereo})
-        flex_controllers.update({f.nway_controller: f for f in self.flex_ui_controllers if f.nway_controller})
-        flex_controllers.update({f.name: f for f in self.flex_ui_controllers})
+        flex_controllers: dict[str, FlexControllerUI] = {f.left_controller: f for f in self.flex_ui_controllers if f.left_controller is not None}
+        flex_controllers.update({f.right_controller: f for f in self.flex_ui_controllers if f.right_controller is not None})
+        flex_controllers.update({f.controller: f for f in self.flex_ui_controllers if f.controller is not None})
+        flex_controllers.update({f.nway_controller: f for f in self.flex_ui_controllers if f.nway_controller is not None})
+        flex_controllers.update({f.name: f for f in self.flex_ui_controllers if f.name is not None})
         rules = {}
         for rule in self.flex_rules:
             stack = []
@@ -186,8 +186,9 @@ class MdlV44(Mdl):
                         stack.append(Value(op.value))
                     elif flex_op == FlexOpType.FETCH1:
                         inputs.append((self.flex_controllers[op.value].name, 'fetch1'))
-                        fc_ui = flex_controllers[self.flex_controllers[op.value].name]
-                        stack.append(FetchController(fc_ui.name, fc_ui.stereo))
+                        controller_name = self.flex_controllers[op.value].name
+                        fc_ui = flex_controllers.get(controller_name)
+                        stack.append(FetchController(fc_ui.name if fc_ui else controller_name, fc_ui.stereo if fc_ui else False))
                     elif flex_op == FlexOpType.FETCH2:
                         inputs.append((self.flex_names[op.value], 'fetch2'))
                         stack.append(FetchFlex(self.flex_names[op.value]))
@@ -211,23 +212,27 @@ class MdlV44(Mdl):
                         stack.append(Dominator(*[stack.pop(-1) for _ in range(op.value + 1)]))
                     elif flex_op == FlexOpType.TWO_WAY_0:
                         inputs.append((self.flex_controllers[op.value].name, '2WAY0'))
-                        fc_ui = flex_controllers[self.flex_controllers[op.value].name]
-                        stack.append(RClamp(FetchController(fc_ui.name, fc_ui.stereo),
+                        controller_name = self.flex_controllers[op.value].name
+                        fc_ui = flex_controllers.get(controller_name)
+                        stack.append(RClamp(FetchController(fc_ui.name if fc_ui else controller_name, fc_ui.stereo if fc_ui else False),
                                             -1, 0, 1, 0))
                     elif flex_op == FlexOpType.TWO_WAY_1:
                         inputs.append((self.flex_controllers[op.value].name, '2WAY1'))
-                        fc_ui = flex_controllers[self.flex_controllers[op.value].name]
-                        stack.append(Clamp(FetchController(fc_ui.name, fc_ui.stereo), 0, 1), )
+                        controller_name = self.flex_controllers[op.value].name
+                        fc_ui = flex_controllers.get(controller_name)
+                        stack.append(Clamp(FetchController(fc_ui.name if fc_ui else controller_name, fc_ui.stereo if fc_ui else False), 0, 1), )
                     elif flex_op == FlexOpType.NWAY:
 
                         inputs.append((self.flex_controllers[op.value].name, 'NWAY'))
-                        fc_ui = flex_controllers[self.flex_controllers[op.value].name]
-                        flex_cnt = FetchController(fc_ui.name, fc_ui.stereo)
+                        controller_name = self.flex_controllers[op.value].name
+                        fc_ui = flex_controllers.get(controller_name)
+                        flex_cnt = FetchController(fc_ui.name if fc_ui else controller_name, fc_ui.stereo if fc_ui else False)
 
                         flex_cnt_value = int(stack.pop(-1).value)
                         inputs.append((self.flex_controllers[flex_cnt_value].name, 'NWAY'))
-                        fc_ui = flex_controllers[self.flex_controllers[flex_cnt_value].name]
-                        multi_cnt = FetchController(fc_ui.nway_controller, fc_ui.stereo)
+                        controller_name_nway = self.flex_controllers[flex_cnt_value].name
+                        fc_ui = flex_controllers.get(controller_name_nway)
+                        multi_cnt = FetchController(fc_ui.nway_controller if fc_ui and fc_ui.nway_controller else controller_name_nway, fc_ui.stereo if fc_ui else False)
 
                         # Reversed the order, revert back if it wont help
                         f_w = stack.pop(-1)
