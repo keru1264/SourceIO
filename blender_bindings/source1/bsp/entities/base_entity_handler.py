@@ -12,11 +12,11 @@ from SourceIO.blender_bindings.source1.vtf import load_skybox_texture
 from SourceIO.blender_bindings.utils.bpy_utils import add_material, get_or_create_material
 from SourceIO.library.source1.vmt import VMT
 from SourceIO.library.source1.vtf import SkyboxException
-from SourceIO.library.utils.math_utilities import ensure_length, lerp_vec
+from SourceIO.library.utils.math_utilities import ensure_length, lerp_vec, srgb_to_linear
 from SourceIO.library.utils.path_utilities import path_stem
 from SourceIO.library.utils.tiny_path import TinyPath
 from SourceIO.logger import SourceLogMan
-from .abstract_entity_handlers import AbstractEntityHandler, _srgb2lin
+from .abstract_entity_handlers import AbstractEntityHandler
 from .base_entity_classes import *
 from .base_entity_classes import entity_class_handle as base_entity_classes
 
@@ -24,15 +24,13 @@ strip_patch_coordinates = re.compile(r"_-?\d+_-?\d+_-?\d+.*$")
 log_manager = SourceLogMan()
 
 
-def srgb_to_linear(srgb: tuple[float]) -> tuple[list[float], float]:
+def _srgb_to_linear(srgb: tuple[float]) -> tuple[list[float], float]:
     final_color = []
     if len(srgb) == 4:
         scale = srgb[3] / 255
     else:
         scale = 1
-    for component in srgb[:3]:
-        component = _srgb2lin(component / 255)
-        final_color.append(component)
+    final_color = srgb_to_linear(srgb[:3])
     if len(final_color) == 1:
         return ensure_length(final_color, 3, final_color[0]), 1
     return final_color, scale
@@ -333,7 +331,7 @@ class BaseEntityHandler(AbstractEntityHandler):
     def handle_light_spot(self, entity: light_spot, entity_raw: dict):
         use_sdr = entity._lightHDR == [-1, -1, -1, -1]
         color_value = entity._lightHDR if use_sdr else entity._light
-        color, brightness = srgb_to_linear(color_value)
+        color, brightness = _srgb_to_linear(color_value)
         scale = float(entity_raw.get('_lightscaleHDR', 1) if use_sdr else 1)
         cone = float(entity_raw.get('_cone', 0)) or 60
         inner_cone = float(entity_raw.get('_inner_cone', 0)) or 60
@@ -353,7 +351,7 @@ class BaseEntityHandler(AbstractEntityHandler):
     def handle_light_environment(self, entity: light_environment, entity_raw: dict):
         use_sdr = entity._lightHDR == [-1, -1, -1, -1]
         color_value = entity._lightHDR if use_sdr else entity._light
-        color, brightness = srgb_to_linear(color_value)
+        color, brightness = _srgb_to_linear(color_value)
         scale = float(entity_raw.get('_lightscaleHDR', 1) if use_sdr else 1)
 
         light: bpy.types.SunLight = bpy.data.lights.new(f'{entity.class_name}_{entity.hammer_id}', 'SUN')
@@ -395,7 +393,7 @@ class BaseEntityHandler(AbstractEntityHandler):
     def handle_light(self, entity: light, entity_raw: dict):
         use_sdr = entity._lightHDR == [-1, -1, -1, -1]
         color_value = entity._lightHDR if use_sdr else entity._light
-        color, brightness = srgb_to_linear(color_value)
+        color, brightness = _srgb_to_linear(color_value)
         scale = float(entity_raw.get('_lightscaleHDR', entity_raw.get('_lightscalehdr', 1)) if use_sdr else 1)
 
         light: bpy.types.PointLight = bpy.data.lights.new(self._get_entity_name(entity), 'POINT')
@@ -661,6 +659,8 @@ class BaseEntityHandler(AbstractEntityHandler):
             already_visited.add(entity.targetname)
             entity = next_entity
             entity_raw = next_raw
+            if "nextkey" not in entity_raw:
+                break
             next_entity, next_raw = self._get_entity_by_name(entity.NextKey)
 
     def _create_rope_part(self, start_entity: move_rope, start_entity_raw: dict, end_entity: dict):
@@ -740,7 +740,8 @@ class BaseEntityHandler(AbstractEntityHandler):
     def handle_infodecal(self, entity: infodecal, entity_raw: dict):
         material_name = TinyPath(entity.texture).name
         material_path = TinyPath("materials") / (entity.texture + ".vmt")
-        size = [128, 128]
+        size = [64, 64] # More reasonable than 128x128, based off of what I've seen for decal resolutions across Source 1
+        decal_scale = 1
         mat = None
         material_file = self.content_manager.find_file(material_path)
         if material_file:
@@ -749,12 +750,17 @@ class BaseEntityHandler(AbstractEntityHandler):
             vmt = VMT(material_file, material_path, self.content_manager)
             ShaderRegistry.source1_create_nodes(self.content_manager, mat, vmt, {})
             tex_name = vmt.get('$basetexture', None)
+            decal_scale_string = vmt.get('$decalscale', None)
+            if decal_scale_string is not None:
+                decal_scale = float(decal_scale_string)
+            else:
+                pass
             if tex_name:
                 tex_name = TinyPath(tex_name).name
                 img = bpy.data.images.get(tex_name)
-                if img:
+                if img and img.size[0] > 0 and img.size[1] > 0:
                     size = list(img.size)
-        x_cor, z_cor = size[0] / 8, size[1] / 8
+        x_cor, z_cor = (size[0] * decal_scale) / 2, (size[1] * decal_scale) / 2
         verts = [
             [-x_cor, 0, -z_cor],
             [x_cor, 0, -z_cor],

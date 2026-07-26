@@ -24,6 +24,8 @@ class TinyPath(str, PathLike):
         value = str(value)
         if "\\" in value:
             value = value.replace("\\", "/")
+        if value == "/":
+            return super().__new__(cls, value)
         return super().__new__(cls, value.rstrip("/"))
 
     @property

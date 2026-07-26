@@ -190,6 +190,7 @@ def import_materials(bsp: VBSPFile, content_manager: ContentManager, settings: S
             content_manager.add_child(pak_lump)
         for texture_data in texture_data_lump.texture_data:
             material_name = strings_lump.strings[texture_data.name_id] or "NO_NAME"
+            material_name = material_name.lstrip("/\\")
             tmp = strip_patch_coordinates.sub("", material_name)
 
             mat = get_or_create_material(path_stem(tmp), tmp)
@@ -269,6 +270,7 @@ def import_materials(bsp: VBSPFile, content_manager: ContentManager, settings: S
         import_idtech3_materials()
     elif texture_info_lump and isinstance(texture_info_lump, Quake3TextureInfoLump):
         import_quake3_materials()
+
 
 def get_tex_info(face: Face, bsp: VBSPFile):
     tex_info_lump: TextureInfoLump = bsp.get_lump('LUMP_TEXINFO')
@@ -367,12 +369,10 @@ def import_disp(bsp: VBSPFile, settings: Source1BSPSettings,
 
             for j in range(num_edge_vertices):
                 disp_vertices[(i * num_edge_vertices + j)] = left_end + (left_right_step * j)
-        disp_uv[:, 0] = (np.dot(disp_vertices, tv1[:3]) + tv1[3] * settings.scale) / (
-                texture_data.view_width * settings.scale)
-        disp_uv[:, 1] = 1 - ((np.dot(disp_vertices, tv2[:3]) + tv2[3] * settings.scale) / (
-                texture_data.view_height * settings.scale))
+        disp_uv[:, 0] = (np.dot(disp_vertices / settings.scale, tv1[:3]) + tv1[3]) / (texture_data.view_width )
+        disp_uv[:, 1] = 1 - ((np.dot(disp_vertices / settings.scale, tv2[:3]) + tv2[3]) / (texture_data.view_height))
 
-        disp_vertices_alpha = disp_verts_lump.vertices['alpha'][disp_indices]
+        disp_vertices_alpha = disp_verts_lump.vertices['alpha'][disp_indices] / 255
         final_vertex_colors['vertex_alpha'] = np.concatenate(
             (np.hstack([disp_vertices_alpha, disp_vertices_alpha, disp_vertices_alpha]),
              np.ones((disp_vertices_alpha.shape[0], 1))), axis=1)

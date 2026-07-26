@@ -12,7 +12,7 @@ from SourceIO.library.shared.content_manager.providers.source1_gameinfo_provider
 from SourceIO.library.shared.content_manager.providers.source2_gameinfo_provider import Source2GameInfoProvider
 from SourceIO.library.shared.content_manager.providers.vpk_provider import VPKContentProvider
 from SourceIO.library.shared.content_manager.providers.zip_content_provider import ZIPContentProvider
-from SourceIO.library.utils import Buffer, FileBuffer, TinyPath, backwalk_file_resolver
+from SourceIO.library.utils import Buffer, FileBuffer, TinyPath, backwalk_file_resolver, corrected_path
 from SourceIO.library.utils.path_utilities import get_mod_path
 from SourceIO.library.utils.singleton import SingletonMeta
 from SourceIO.logger import SourceLogMan
@@ -206,6 +206,7 @@ class ContentManager(ContentProvider, metaclass=SingletonMeta):
     def find_file(self, filepath: TinyPath, do_not_cache=False) -> Buffer | None:
         """Find and optionally cache file buffers with owner/exists LRU metadata."""
         if filepath.is_absolute():
+            filepath = corrected_path(filepath)
             if filepath.exists():
                 return FileBuffer(filepath)
             return None

@@ -35,8 +35,7 @@ class Nodes:
     ShaderNodeBump = 'ShaderNodeBump'
     ShaderNodeCameraData = 'ShaderNodeCameraData'
     ShaderNodeClamp = 'ShaderNodeClamp'
-    ShaderNodeCombineHSV = 'ShaderNodeCombineHSV'
-    ShaderNodeCombineRGB = 'ShaderNodeCombineRGB'
+    ShaderNodeCombineColor = 'ShaderNodeCombineColor'
     ShaderNodeCombineXYZ = 'ShaderNodeCombineXYZ'
     ShaderNodeCustomGroup = 'ShaderNodeCustomGroup'
     ShaderNodeDisplacement = 'ShaderNodeDisplacement'
@@ -72,8 +71,7 @@ class Nodes:
     ShaderNodeRGBCurve = 'ShaderNodeRGBCurve'
     ShaderNodeRGBToBW = 'ShaderNodeRGBToBW'
     ShaderNodeScript = 'ShaderNodeScript'
-    ShaderNodeSeparateHSV = 'ShaderNodeSeparateHSV'
-    ShaderNodeSeparateRGB = 'ShaderNodeSeparateRGB'
+    ShaderNodeSeparateColor = 'ShaderNodeSeparateColor'
     ShaderNodeSeparateXYZ = 'ShaderNodeSeparateXYZ'
     ShaderNodeShaderToRGB = 'ShaderNodeShaderToRGB'
     ShaderNodeSqueeze = 'ShaderNodeSqueeze'
@@ -142,7 +140,14 @@ class ShaderBase:
             asset_path = current_path / 'assets' / "source2_materials.blend"
             append_blend(str(asset_path), "node_groups")
 
-    def insert_object_tint(self, color_output_socket, tint_amount=1.0, tint_mask_output:None | object=None):
+    @staticmethod
+    def load_source2_nodes_blender5_0():
+        if "environment_blend.vfx 5.0" not in bpy.data.node_groups:
+            current_path = TinyPath(__file__).parent.parent
+            asset_path = current_path / 'assets' / "source2_materials_5_0.blend"
+            append_blend(str(asset_path), "node_groups")
+
+    def insert_object_tint(self, color_output_socket, tint_amount=1.0, tint_mask_output: None | object = None):
         color_multiply_node = self.create_node(Nodes.ShaderNodeMixRGB)
         color_multiply_node.blend_type = 'MULTIPLY'
         if tint_mask_output is None:
@@ -195,13 +200,10 @@ class ShaderBase:
         else:
             image = bpy.data.images.new(texture_name, width=512, height=512, alpha=False)
             image_data = np.full((512 * 512, 4), fill_color, np.float32).flatten()
-            if bpy.app.version > (2, 83, 0):
-                image.pixels.foreach_set(image_data.ravel())
-            else:
-                image.pixels[:] = image_data
+            image.pixels.foreach_set(image_data.ravel())
             return image
 
-    def load_texture(self, texture_name, texture_path) -> Optional[bpy.types.Image]:
+    def load_texture(self, texture_name:TinyPath, texture_path: TinyPath | None = None) -> Optional[bpy.types.Image]:
         pass
 
     @staticmethod
@@ -230,7 +232,10 @@ class ShaderBase:
         if file.startswith("/"):
             file = file[1:]
         file = TinyPath(file)
-        texture = self.load_texture(file.stem, file.parent)
+        if len(file.parts) == 1:
+            texture = self.load_texture(file.stem, None)
+        else:
+            texture = self.load_texture(file.stem, file.parent)
         return texture or self.get_missing_texture(f'missing_{file.stem}', default_color)
 
     @staticmethod
@@ -272,14 +277,14 @@ class ShaderBase:
         return texture_node
 
     def create_and_connect_texture_node(self, texture, color_out_target=None, alpha_out_target=None, *, name=None,
-                                        UV=None):
+                                        uv_out=None):
         texture_node = self.create_texture_node(texture, name)
         if color_out_target is not None:
             self.connect_nodes(texture_node.outputs['Color'], color_out_target)
         if alpha_out_target is not None:
             self.connect_nodes(texture_node.outputs['Alpha'], alpha_out_target)
-        if UV is not None:
-            self.connect_nodes(UV.outputs[0], texture_node.inputs[0])
+        if uv_out is not None:
+            self.connect_nodes(uv_out, texture_node.inputs[0])
         return texture_node
 
     def get_node(self, name):
@@ -350,3 +355,84 @@ class ShaderBase:
         if uv_layer_name is not None:
             uv_node.uv_map = uv_layer_name
         return uv_node
+
+    # Helper function to get node tree items like sockets by name from node groups with panels,
+    # in case there are multiple with the same name.
+    # This may still fail if there are multiple items with the same name & type at the same level on the tree
+    def get_nodetree_item_from_path(self, root: bpy.types.NodeTreeInterfaceItem | bpy.types.NodeTree, path: list[str],
+                                    item_type: type = bpy.types.NodeTreeInterfaceItem, is_output=False,
+                                    ignore_level=False):
+        check_in_out = isinstance(item_type, bpy.types.NodeTreeInterfaceSocket)
+        in_out_str = 'OUTPUT' if is_output else 'INPUT'
+
+        if isinstance(root, bpy.types.NodeTreeInterfaceItem):
+            curr_item = root
+        else:
+            # If the root is the node tree, that has a different variable to access
+            # Quickly grab a value just in case this is the right one.
+            curr_item = root.interface.items_tree[path[0]]
+
+            # HACK: If we get a child, start going through the whole damn tree until we find the top level item we want
+            if curr_item.parent.index != -1 and not ignore_level:
+                new_item = None
+                for i, item in enumerate(root.interface.items_tree):
+                    if item.name == path[0] and item.parent.index == -1:
+                        # if path len is 1, we're not looking for the root we're just trying to find the item.
+                        if len(path) == 1 and isinstance(item, item_type) and (
+                                check_in_out and curr_item.in_out != in_out_str):
+                            continue
+                        new_item = item
+                        break
+
+                if new_item is None:
+                    self.logger.error(f'Could not find first item \'{path[0]}\'! Full path: {path}')
+                    return None
+                else:
+                    curr_item = new_item
+            # Remove the path segment we just accessed.
+            del path[0]
+
+        for path_segment in path:
+            if curr_item.item_type == 'SOCKET':
+                self.logger.error(
+                    f'Current NodeTree item \'{curr_item.name}\' is a socket, but is not the last item in the path! Full path: {path}')
+
+            # .get for some reason works fine in blender's python console, but not for addons?
+            # Accessing interface_items by name doesn't work (yet) due to a blender bug (bug report filed after 5.1)
+            # curr_item = curr_item.interface_items.get(path_segment)
+            # HACK: check if invalid this way since .get doesn't work yet.
+            next_index = curr_item.interface_items.find(path_segment)
+            if next_index == -1:
+                self.logger.error(f'Could not find next item \'{path_segment}\'! Full path: {path}')
+                return None
+            curr_item = curr_item.interface_items[next_index]
+
+        if isinstance(curr_item, item_type):
+            if check_in_out and curr_item.in_out != in_out_str:
+                self.logger.error(
+                    f'Found a NodeTree socket of name \'{curr_item.name}\' but the socket type is \'{curr_item.in_out}\' instead of \'{in_out_str}\'!')
+
+        return curr_item
+
+    def get_group_socket_index(self, node_tree: bpy.types.NodeTree, socket_path: list[str],
+                               root: bpy.types.NodeTreeInterfaceItem = None, is_output=False, ignore_level=False):
+        socket = self.get_nodetree_item_from_path(root or node_tree, socket_path, bpy.types.NodeTreeInterfaceSocket,
+                                                  is_output, ignore_level)
+
+        # There's already an error from get_nodetree_item_from_path if this happens, so just return.
+        if socket is None:
+            return None
+
+        if socket.item_type != "SOCKET":
+            self.logger.error(f"Attempted to get socket from path, but did not find socket! item found: {socket}")
+
+        # go through all the sockets (input or output), and find the one with a matching unique identifier.
+        socket_identifier = socket.identifier
+        group_sockets = node_tree.nodes['Group Input'].outputs if not is_output else node_tree.nodes[
+            'Group Output'].inputs
+        for i, node_socket in enumerate(group_sockets):
+            if node_socket.identifier == socket_identifier:
+                return i
+
+        self.logger.error(f"Could not find index for socket: {socket.name}")
+        return None

@@ -39,6 +39,7 @@ def find_vtx_cm(mdl_path: TinyPath, content_manager):
             path = content_manager.find_file(mdl_path.with_suffix(f'.dx{vtx_version}.vtx'))
         if path:
             return path
+    return None
 
 
 def backwalk_file_resolver(current_path, file_to_find) -> Optional[TinyPath]:
@@ -63,6 +64,9 @@ def corrected_path(path: TinyPath):
     if len(path.parts) < 3:
         return path
     root, *parts, fname = path.parts
+
+    if root == "":
+        root = TinyPath("/")
 
     new_path = TinyPath(root)
     for part in parts:

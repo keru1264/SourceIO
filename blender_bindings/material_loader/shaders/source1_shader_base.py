@@ -11,7 +11,7 @@ from SourceIO.library.utils.tiny_path import TinyPath
 
 
 class Source1ShaderBase(ShaderBase):
-    def __init__(self, content_manager: ContentManager, vmt):
+    def __init__(self, content_manager: ContentManager, vmt: VMT):
         super().__init__()
         self.content_manager = content_manager
         self.load_bvlg_nodes()
@@ -22,21 +22,25 @@ class Source1ShaderBase(ShaderBase):
         self._vmt: VMT = vmt
         self.textures = {}
 
-    def load_texture(self, texture_name: str, texture_path: TinyPath):
-        image = check_texture_cache(texture_path / texture_name)
+    def load_texture(self, texture_name: TinyPath, texture_path: TinyPath | None = None):
+        if texture_path is None or texture_path == texture_name:
+            full_path = texture_name
+        else:
+            full_path = texture_path / texture_name
+        image = check_texture_cache(full_path)
         if image is not None:
             return image
-        if texture_path.is_absolute(): # Absolute paths shouldn't even be here! This path is invalid
+        if texture_path is not None and texture_path.is_absolute():  # Absolute paths shouldn't even be here! This path is invalid
             return None
-        texture_file = self.content_manager.find_file("materials" / texture_path / (texture_name + ".vtf"))
+        texture_file = self.content_manager.find_file("materials" / (full_path + ".vtf"))
 
         if texture_file is not None:
-            return import_texture(texture_path / texture_name, texture_file)
+            return import_texture(full_path, texture_file)
 
-        texture_header_file = self.content_manager.find_file("materials" / texture_path / (texture_name + ".tth"))
-        texture_data_file = self.content_manager.find_file("materials" / texture_path / (texture_name + ".ttz"))
+        texture_header_file = self.content_manager.find_file("materials"  / (full_path + ".tth"))
+        texture_data_file = self.content_manager.find_file("materials" /  (full_path + ".ttz"))
         if texture_header_file is not None and texture_data_file is not None:
-            return import_texture_tth(texture_path / texture_name, texture_header_file, texture_data_file)
+            return import_texture_tth(full_path, texture_header_file, texture_data_file)
         return None
 
     @staticmethod

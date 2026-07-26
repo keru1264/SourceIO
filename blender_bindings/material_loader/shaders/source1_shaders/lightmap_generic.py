@@ -102,6 +102,9 @@ class LightmapGeneric(DetailSupportMixin, Source1ShaderBase):
             bumpmap_node = self.create_node(Nodes.ShaderNodeTexImage, '$bumpmap')
             bumpmap_node.image = bumpmap
 
+            if self.basetexturetransform:
+                uv, self.uv_map = self.handle_transform(self.basetexturetransform, bumpmap_node.inputs[0])
+
             normalmap_node = self.create_node(Nodes.ShaderNodeNormalMap)
 
             self.connect_nodes(bumpmap_node.outputs['Color'], normalmap_node.inputs['Color'])
